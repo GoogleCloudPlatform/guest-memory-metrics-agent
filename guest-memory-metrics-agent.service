@@ -1,0 +1,14 @@
+[Unit]
+Description=Guest Memory Metrics Agent
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/kernel_metrics_agent record --memory_duration=87600h
+DynamicUser=yes
+AmbientCapabilities=CAP_DAC_READ_SEARCH
+StandardOutput=journal
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
