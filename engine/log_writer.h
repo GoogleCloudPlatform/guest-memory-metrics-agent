@@ -4,6 +4,7 @@
 #include <fstream>
 #include <string>
 
+#include "third_party/absl/container/flat_hash_map.h"
 #include "third_party/absl/status/status.h"
 
 namespace guest_memory_metrics {
@@ -25,6 +26,8 @@ class LogWriter {
 
   std::string output_path_;
   std::ofstream out_stream_;
+  absl::flat_hash_map<std::string, std::string> scrub_cache_;
+  static constexpr size_t kMaxCacheSize = 10000;
 };
 
 }  // namespace guest_memory_metrics

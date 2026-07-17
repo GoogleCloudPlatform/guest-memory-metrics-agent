@@ -14,9 +14,9 @@
 #include "third_party/guest_memory_metrics_agent/engine/report_engine.h"
 #include "third_party/guest_memory_metrics_agent/engine/sampling_engine.h"
 #include "third_party/guest_memory_metrics_agent/providers/cgroup_provider.h"
+#include "third_party/guest_memory_metrics_agent/providers/metric_snapshot.h"
 #include "third_party/guest_memory_metrics_agent/providers/numa_provider.h"
 #include "third_party/guest_memory_metrics_agent/providers/proc_provider.h"
-#include "third_party/guest_memory_metrics_agent/providers/metric_snapshot.h"
 
 ABSL_FLAG(absl::Duration, memory_duration, absl::Minutes(5),
           "Duration to record memory metrics");
@@ -123,8 +123,7 @@ int main(int argc, char* argv[]) {
       return 4;
     }
     std::string metric_name = positional[2];
-    std::cout << guest_memory_metrics::GetHelpForMetric(metric_name)
-              << "\n";
+    std::cout << guest_memory_metrics::GetHelpForMetric(metric_name) << "\n";
   } else {
     std::cerr << "Unknown mode: " << mode << "\n";
     return 5;

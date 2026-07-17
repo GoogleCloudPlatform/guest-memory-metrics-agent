@@ -2,9 +2,13 @@
 
 #include <cstdint>
 #include <fstream>
-#include <sstream>
 #include <string>
+#include <string_view>
+#include <vector>
 
+#include "third_party/absl/strings/numbers.h"
+#include "third_party/absl/strings/str_cat.h"
+#include "third_party/absl/strings/str_split.h"
 #include "third_party/absl/time/clock.h"
 #include "third_party/absl/time/time.h"
 #include "third_party/guest_memory_metrics_agent/providers/metric_snapshot.h"
@@ -24,18 +28,21 @@ MetricSnapshot ProcProvider::GetSnapshot() const {
     if (!file.is_open()) return;
     std::string line;
     while (std::getline(file, line)) {
-      std::istringstream iss(line);
-      std::string key;
-      uint64_t value;
-      std::string unit;
-      if (iss >> key >> value) {
+      std::vector<std::string_view> tokens =
+          absl::StrSplit(line, absl::ByAnyChar(" \t"), absl::SkipEmpty());
+      if (tokens.size() >= 2) {
+        std::string_view key = tokens[0];
         if (!key.empty() && key.back() == ':') {
-          key.pop_back();
+          key.remove_suffix(1);
         }
-        if (iss >> unit) {
-          if (unit == "kB") value *= 1024;
+        int64_t signed_value;
+        if (absl::SimpleAtoi(tokens[1], &signed_value)) {
+          if (tokens.size() >= 3 && tokens[2] == "kB") {
+            signed_value *= 1024;
+          }
+          snapshot.metrics[absl::StrCat(prefix, key)] =
+              static_cast<uint64_t>(signed_value);
         }
-        snapshot.metrics[prefix + key] = value;
       }
     }
   };

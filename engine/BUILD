@@ -11,7 +11,10 @@ cc_library(
     srcs = ["log_writer.cc"],
     hdrs = ["log_writer.h"],
     deps = [
+        "//third_party/absl/base:no_destructor",
+        "//third_party/absl/container:flat_hash_map",
         "//third_party/absl/status",
+        "//third_party/absl/strings",
         "//third_party/absl/strings:str_format",
     ],
 )

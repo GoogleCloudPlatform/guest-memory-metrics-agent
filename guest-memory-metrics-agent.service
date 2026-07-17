@@ -3,7 +3,14 @@ Description=Guest Memory Metrics Agent
 After=network.target
 
 [Service]
-ExecStart=/usr/local/bin/kernel_metrics_agent record --memory_duration=87600h
+# Log the start timestamp in epoch milliseconds for easy reference
+ExecStartPre=/bin/sh -c 'echo "AGENT_START_TIMESTAMP (ms): $(date +%%s%%3N)"'
+
+LogsDirectory=guest-memory-metrics-agent
+ExecStart=/usr/local/bin/kernel_metrics_agent record --memory_duration=87600h --output=/var/log/guest-memory-metrics-agent/metrics.log --sample=2s
+
+# Log the stop timestamp in epoch milliseconds when it exits
+ExecStopPost=/bin/sh -c 'echo "AGENT_STOP_TIMESTAMP (ms): $(date +%%s%%3N)"'
 DynamicUser=yes
 AmbientCapabilities=CAP_DAC_READ_SEARCH
 StandardOutput=journal

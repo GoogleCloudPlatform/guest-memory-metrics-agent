@@ -1,14 +1,18 @@
 #include "third_party/guest_memory_metrics_agent/providers/numa_provider.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>  // NOLINT
 #include <fstream>
-#include <sstream>
 #include <string>
+#include <string_view>
 #include <system_error>  // NOLINT
+#include <vector>
 
 #include "third_party/absl/strings/match.h"
+#include "third_party/absl/strings/numbers.h"
 #include "third_party/absl/strings/str_cat.h"
+#include "third_party/absl/strings/str_split.h"
 #include "third_party/absl/time/clock.h"
 #include "third_party/absl/time/time.h"
 #include "third_party/guest_memory_metrics_agent/providers/metric_snapshot.h"
@@ -35,41 +39,51 @@ MetricSnapshot NumaProvider::GetSnapshot() const {
     const auto& entry = *iter;
     std::error_code dir_ec;
     if (entry.is_directory(dir_ec)) {
-      std::string dir_name = entry.path().filename().string();
+      const std::string& path_str = entry.path().native();
+      size_t last_slash = path_str.find_last_of('/');
+      std::string_view dir_name =
+          (last_slash == std::string::npos)
+              ? path_str
+              : std::string_view(path_str).substr(last_slash + 1);
+
       if (absl::StartsWith(dir_name, "node")) {
-        std::string meminfo_path = (entry.path() / "meminfo").string();
+        std::string meminfo_path = absl::StrCat(path_str, "/meminfo");
         std::ifstream file(meminfo_path);
         if (file.is_open()) {
           std::string line;
           while (std::getline(file, line)) {
-            std::istringstream iss(line);
-            std::string first_word;
-            std::string key;
-            uint64_t value;
-            std::string unit;
+            std::vector<std::string_view> tokens =
+                absl::StrSplit(line, absl::ByAnyChar(" \t"), absl::SkipEmpty());
+            if (tokens.empty()) continue;
 
-            if (iss >> first_word) {
-              if (first_word == "Node") {
-                std::string node_num;
-                if (!(iss >> node_num >> key)) {
-                  continue;
-                }
-              } else {
-                key = first_word;
-              }
+            size_t val_idx = 0;
+            std::string_view key;
 
-              if (iss >> value) {
-                if (!key.empty() && key.back() == ':') {
-                  key.pop_back();
-                }
-                if (iss >> unit) {
-                  if (unit == "kB" || unit == "kb") {
-                    value *= 1024;
-                  }
-                }
-                snapshot.metrics[absl::StrCat("numa.", dir_name, ".", key)] =
-                    value;
+            if (tokens[0] == "Node") {
+              if (tokens.size() < 4) continue;
+              // Node <num> <key> <value>
+              key = tokens[2];
+              val_idx = 3;
+            } else {
+              if (tokens.size() < 2) continue;
+              // <key> <value>
+              key = tokens[0];
+              val_idx = 1;
+            }
+
+            int64_t signed_value;
+            if (absl::SimpleAtoi(tokens[val_idx], &signed_value)) {
+              if (!key.empty() && key.back() == ':') {
+                key.remove_suffix(1);
               }
+              if (tokens.size() > val_idx + 1) {
+                std::string_view unit = tokens[val_idx + 1];
+                if (unit == "kB" || unit == "kb") {
+                  signed_value *= 1024;
+                }
+              }
+              snapshot.metrics[absl::StrCat("numa.", dir_name, ".", key)] =
+                  static_cast<uint64_t>(signed_value);
             }
           }
         }

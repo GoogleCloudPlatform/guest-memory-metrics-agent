@@ -18,6 +18,7 @@ exports_files(["LICENSE"])
 cc_binary(
     name = "kernel_metrics_agent",
     srcs = ["main.cc"],
+    linkstatic = True,
     deps = [
         "//third_party/absl/flags:flag",
         "//third_party/absl/flags:parse",

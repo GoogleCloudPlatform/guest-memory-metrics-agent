@@ -28,13 +28,12 @@ void SamplingEngine::Start() {
   // Block SIGALRM before creating the thread so the main thread and
   // the new thread both have it blocked. This prevents the OS from
   // delivering the signal to the main thread and terminating the process.
-  sigset_t sigset, oldset;
+  sigset_t sigset;
   sigemptyset(&sigset);
   sigaddset(&sigset, SIGALRM);
-  pthread_sigmask(SIG_BLOCK, &sigset, &oldset);
+  pthread_sigmask(SIG_BLOCK, &sigset, nullptr);
 
   thread_ = std::thread(&SamplingEngine::Loop, this);
-  pthread_sigmask(SIG_SETMASK, &oldset, nullptr);
 }
 
 void SamplingEngine::Stop() {

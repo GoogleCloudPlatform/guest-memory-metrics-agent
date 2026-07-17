@@ -21,6 +21,7 @@ cc_library(
         "proc_provider.h",
     ],
     deps = [
+        "//third_party/absl/algorithm:container",
         "//third_party/absl/strings",
         "//third_party/absl/time",
     ],
