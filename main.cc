@@ -1,3 +1,17 @@
+// Copyright 2026 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include <cstdint>
 #include <fstream>
 #include <future>  // NOLINT
@@ -9,14 +23,14 @@
 #include "third_party/absl/flags/parse.h"
 #include "third_party/absl/time/clock.h"
 #include "third_party/absl/time/time.h"
-#include "third_party/guest_memory_metrics_agent/engine/help_database.h"
-#include "third_party/guest_memory_metrics_agent/engine/log_writer.h"
-#include "third_party/guest_memory_metrics_agent/engine/report_engine.h"
-#include "third_party/guest_memory_metrics_agent/engine/sampling_engine.h"
-#include "third_party/guest_memory_metrics_agent/providers/cgroup_provider.h"
-#include "third_party/guest_memory_metrics_agent/providers/metric_snapshot.h"
-#include "third_party/guest_memory_metrics_agent/providers/numa_provider.h"
-#include "third_party/guest_memory_metrics_agent/providers/proc_provider.h"
+#include "engine/help_database.h"
+#include "engine/log_writer.h"
+#include "engine/report_engine.h"
+#include "engine/sampling_engine.h"
+#include "providers/cgroup_provider.h"
+#include "providers/metric_snapshot.h"
+#include "providers/numa_provider.h"
+#include "providers/proc_provider.h"
 
 ABSL_FLAG(absl::Duration, memory_duration, absl::Minutes(5),
           "Duration to record memory metrics");

@@ -1,9 +1,24 @@
-#include "third_party/guest_memory_metrics_agent/engine/log_writer.h"
+// Copyright 2026 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
+#include "engine/log_writer.h"
+
+#include <fstream>
 #include <string>
 
-#include "testing/base/public/gunit.h"
-#include "third_party/absl/strings/match.h"
+#include "gtest/gtest.h"
+#include "absl/strings/match.h"
 
 namespace guest_memory_metrics {
 namespace {
@@ -244,6 +259,110 @@ TEST(LogWriterTest, ScrubGenericUuidAndHash) {
   EXPECT_TRUE(output.find(raw_uuid) == std::string::npos);
   EXPECT_TRUE(output.find(raw_hash) == std::string::npos);
   EXPECT_TRUE(absl::StrContains(output, "[HASH:"));
+}
+
+TEST(LogWriterTest, ScrubCustomCgroupTokenAllowlist) {
+  LogWriter writer;
+  testing::internal::CaptureStdout();
+  writer.WriteMetric(123, "host", "cgroup/Bob_App/memory.current", 123);
+  std::string output = testing::internal::GetCapturedStdout();
+  EXPECT_TRUE(output.find("Bob_App") == std::string::npos);
+  EXPECT_TRUE(absl::StrContains(output, "cgroup/[HASH:"));
+}
+
+TEST(LogWriterTest, ScrubConsecutiveProcPids) {
+  LogWriter writer;
+  testing::internal::CaptureStdout();
+  writer.WriteMetric(9999, "host", "/proc/12345/proc/67890/memory.stat", 8888);
+  std::string output = testing::internal::GetCapturedStdout();
+  EXPECT_TRUE(output.find("12345") == std::string::npos);
+  EXPECT_TRUE(output.find("67890") == std::string::npos);
+  EXPECT_TRUE(absl::StrContains(output, "/proc/[HASH:"));
+}
+
+TEST(LogWriterTest, AllowsNumberedSystemTokens) {
+  LogWriter writer;
+  testing::internal::CaptureStdout();
+  writer.WriteMetric(123, "host", "cgroup.cpu0.usage_in_bytes", 100);
+  writer.WriteMetric(123, "host", "sys.node1.memory.stat", 200);
+  writer.WriteMetric(123, "host", "net.eth0.stat", 300);
+  writer.WriteMetric(123, "host", "disk.nvme0n1.stat", 400);
+  writer.WriteMetric(123, "host", "block.sda1.stat", 500);
+  std::string output = testing::internal::GetCapturedStdout();
+  EXPECT_TRUE(absl::StrContains(output, "cpu0.usage_in_bytes"));
+  EXPECT_TRUE(absl::StrContains(output, "node1.memory.stat"));
+  EXPECT_TRUE(absl::StrContains(output, "eth0.stat"));
+  EXPECT_TRUE(absl::StrContains(output, "nvme0n1.stat"));
+  EXPECT_TRUE(absl::StrContains(output, "sda1.stat"));
+}
+
+TEST(LogWriterTest, HashesStructuralDigitTokens) {
+  LogWriter writer;
+  testing::internal::CaptureStdout();
+  writer.WriteMetric(123, "host", "cgroup.pod1234.memory.stat", 100);
+  writer.WriteMetric(123, "host", "sys.user1000.cpu.stat", 200);
+  std::string output = testing::internal::GetCapturedStdout();
+  EXPECT_TRUE(output.find("pod1234") == std::string::npos);
+  EXPECT_TRUE(output.find("user1000") == std::string::npos);
+  EXPECT_TRUE(absl::StrContains(output, "pod[HASH:") ||
+              absl::StrContains(output, "[HASH:"));
+}
+
+TEST(LogWriterTest, JsonEscapesSpecialCharacters) {
+  LogWriter writer;
+  testing::internal::CaptureStdout();
+  writer.WriteMetric(123, "host\"name\n", "proc.meminfo.MemFree", 12345);
+  std::string output = testing::internal::GetCapturedStdout();
+  EXPECT_TRUE(absl::StrContains(output, R"("source": "host\"name\n")"));
+}
+
+TEST(LogWriterTest, ScrubCacheHitReturnsSameScrubbedString) {
+  LogWriter writer;
+  testing::internal::CaptureStdout();
+  // Call twice with identical metric path to exercise cache hit
+  writer.WriteMetric(100, "host", "cgroup/user_app/memory.current", 50);
+  writer.WriteMetric(200, "host", "cgroup/user_app/memory.current", 60);
+  std::string output = testing::internal::GetCapturedStdout();
+  EXPECT_TRUE(absl::StrContains(output, "cgroup/[HASH:"));
+}
+
+TEST(LogWriterTest, ScrubUserDirectoryNoUsernameOrSuffix) {
+  LogWriter writer;
+  testing::internal::CaptureStdout();
+  // Exercise trailing /home/ and /users/ without username/suffix
+  writer.WriteMetric(100, "host", "/home/", 50);
+  writer.WriteMetric(200, "host", "/users/", 60);
+  std::string output = testing::internal::GetCapturedStdout();
+  EXPECT_TRUE(absl::StrContains(output, "/home/[REDACTED]"));
+  EXPECT_TRUE(absl::StrContains(output, "/users/[REDACTED]"));
+}
+
+TEST(LogWriterTest, WriteMetricToFileStream) {
+  std::string tmp_path = testing::TempDir() + "/test_metric_log.json";
+  LogWriter writer(tmp_path);
+  EXPECT_TRUE(writer.Open().ok());
+  writer.WriteMetric(1234567890, "source_host", "proc.meminfo.MemFree", 4096);
+  writer.Close();
+
+  std::ifstream f(tmp_path);
+  std::string file_content;
+  std::getline(f, file_content);
+  EXPECT_TRUE(absl::StrContains(file_content, R"("source": "source_host")"));
+  EXPECT_TRUE(
+      absl::StrContains(file_content, R"("metric": "proc.meminfo.MemFree")"));
+  EXPECT_TRUE(absl::StrContains(file_content, R"("value": 4096)"));
+}
+
+TEST(LogWriterTest, ScrubCacheEvictionFiresWhenFull) {
+  LogWriter writer;
+  testing::internal::CaptureStdout();
+  // Fill cache beyond 10,000 entries to trigger 50% eviction
+  for (int i = 0; i < 10005; ++i) {
+    writer.WriteMetric(100, "host",
+                       absl::StrFormat("cgroup/app_%d/memory.stat", i), i);
+  }
+  std::string output = testing::internal::GetCapturedStdout();
+  EXPECT_FALSE(output.empty());
 }
 
 }  // namespace

@@ -1,8 +1,8 @@
-load("//third_party/bazel_rules/rules_cc/cc:cc_library.bzl", "cc_library")
-load("//third_party/bazel_rules/rules_cc/cc:cc_test.bzl", "cc_test")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_test")
 
 package(
-    default_applicable_licenses = ["//third_party/guest_memory_metrics_agent:license"],
+    default_applicable_licenses = ["//:license"],
     default_visibility = ["//visibility:public"],
 )
 
@@ -21,9 +21,9 @@ cc_library(
         "proc_provider.h",
     ],
     deps = [
-        "//third_party/absl/algorithm:container",
-        "//third_party/absl/strings",
-        "//third_party/absl/time",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
     ],
 )
 
@@ -32,6 +32,6 @@ cc_test(
     srcs = ["providers_test.cc"],
     deps = [
         ":metrics",
-        "//testing/base/public:gunit_main",
+        "@com_google_googletest//:gtest_main",
     ],
 )

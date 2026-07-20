@@ -58,12 +58,7 @@ relying on custom dynamic linkers), it must be built statically.
 
 **For External / Open-Source Users (using Bazel):**
 ```bash
-bazel build --features=fully_static_link //third_party/guest_memory_metrics_agent:kernel_metrics_agent
-```
-
-**For Internal Google Engineers (using Blaze):**
-```bash
-SKYBUILD=1 blaze build --features=fully_static_link //third_party/guest_memory_metrics_agent:kernel_metrics_agent
+bazel build --features=fully_static_link //:kernel_metrics_agent
 ```
 
 ### 2. Deploying to a VM
@@ -71,11 +66,9 @@ Transfer the compiled binary and the systemd service file to your target VM
 using `gcloud compute scp`. Ensure you replace `<INSTANCE_NAME>`, `<PROJECT_ID>`,
 and `<ZONE>` with your specific VM details.
 
-*(Note: Internal Google users should substitute `bazel-bin` with `blaze-bin` in the path below.)*
-
 ```bash
-gcloud compute scp bazel-bin/third_party/guest_memory_metrics_agent/kernel_metrics_agent <INSTANCE_NAME>:~/ --project=<PROJECT_ID> --zone=<ZONE>
-gcloud compute scp third_party/guest_memory_metrics_agent/guest-memory-metrics-agent.service <INSTANCE_NAME>:~/ --project=<PROJECT_ID> --zone=<ZONE>
+gcloud compute scp bazel-bin/kernel_metrics_agent <INSTANCE_NAME>:~/ --project=<PROJECT_ID> --zone=<ZONE>
+gcloud compute scp guest-memory-metrics-agent.service <INSTANCE_NAME>:~/ --project=<PROJECT_ID> --zone=<ZONE>
 ```
 
 ### 3. Installation

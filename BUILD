@@ -8,12 +8,12 @@ package(
     default_visibility = ["//visibility:public"],
 )
 
+exports_files(["LICENSE"])
+
 license(
     name = "license",
-    package_name = "guest_memory_metrics_agent",
+    license_text = "LICENSE",
 )
-
-exports_files(["LICENSE"])
 
 cc_binary(
     name = "kernel_metrics_agent",
@@ -23,10 +23,10 @@ cc_binary(
         "//third_party/absl/flags:flag",
         "//third_party/absl/flags:parse",
         "//third_party/absl/time",
-        "//third_party/guest_memory_metrics_agent/engine:help_database",
-        "//third_party/guest_memory_metrics_agent/engine:log_writer",
-        "//third_party/guest_memory_metrics_agent/engine:report_engine",
-        "//third_party/guest_memory_metrics_agent/engine:sampling_engine",
-        "//third_party/guest_memory_metrics_agent/providers:metrics",
+        "//engine:help_database",
+        "//engine:log_writer",
+        "//engine:report_engine",
+        "//engine:sampling_engine",
+        "//providers:metrics",
     ],
 )

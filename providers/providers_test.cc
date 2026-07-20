@@ -1,3 +1,17 @@
+// Copyright 2026 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include <atomic>
 #include <cstdint>
 #include <cstdlib>
@@ -8,11 +22,11 @@
 #include <system_error>  // NOLINT(build/c++11)
 #include <thread>        // NOLINT(build/c++11)
 
-#include "testing/base/public/gunit.h"
-#include "third_party/guest_memory_metrics_agent/providers/cgroup_provider.h"
-#include "third_party/guest_memory_metrics_agent/providers/metric_snapshot.h"
-#include "third_party/guest_memory_metrics_agent/providers/numa_provider.h"
-#include "third_party/guest_memory_metrics_agent/providers/proc_provider.h"
+#include "gtest/gtest.h"
+#include "providers/cgroup_provider.h"
+#include "providers/metric_snapshot.h"
+#include "providers/numa_provider.h"
+#include "providers/proc_provider.h"
 
 namespace guest_memory_metrics {
 namespace {
@@ -534,7 +548,7 @@ TEST_F(ProvidersTest, ProcProviderNegativeNumbers) {
   std::ofstream(proc_dir / "meminfo") << "CommitLimit:    -1 kB\n";
   ProcProvider provider(proc_dir.string());
   auto snapshot = provider.GetSnapshot();
-  EXPECT_TRUE(snapshot.metrics.contains("proc.meminfo.CommitLimit"));
+  EXPECT_TRUE(snapshot.metrics.count("proc.meminfo.CommitLimit") > 0);
   EXPECT_EQ(snapshot.metrics["proc.meminfo.CommitLimit"], static_cast<uint64_t>(-1024));
 }
 
@@ -656,7 +670,7 @@ TEST_F(ProvidersTest, CgroupProviderNegativeNumbers) {
   std::ofstream(cgroup_dir / "memory.stat") << "negative_val -1\n";
   CgroupProvider provider(cgroup_dir.string());
   auto snapshot = provider.GetSnapshot();
-  EXPECT_TRUE(snapshot.metrics.contains("cgroup.memory.stat.negative_val"));
+  EXPECT_TRUE(snapshot.metrics.count("cgroup.memory.stat.negative_val") > 0);
   EXPECT_EQ(snapshot.metrics["cgroup.memory.stat.negative_val"], static_cast<uint64_t>(-1));
 }
 
@@ -779,7 +793,7 @@ TEST_F(ProvidersTest, NumaProviderNegativeNumbers) {
       << "Node 0 CommitLimit:     -1 kB\n";
   NumaProvider provider(sys_dir.string());
   auto snapshot = provider.GetSnapshot();
-  EXPECT_TRUE(snapshot.metrics.contains("numa.node0.CommitLimit"));
+  EXPECT_TRUE(snapshot.metrics.count("numa.node0.CommitLimit") > 0);
   EXPECT_EQ(snapshot.metrics["numa.node0.CommitLimit"], static_cast<uint64_t>(-1024));
 }
 

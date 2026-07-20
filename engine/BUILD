@@ -1,8 +1,8 @@
-load("//third_party/bazel_rules/rules_cc/cc:cc_library.bzl", "cc_library")
-load("//third_party/bazel_rules/rules_cc/cc:cc_test.bzl", "cc_test")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_test")
 
 package(
-    default_applicable_licenses = ["//third_party/guest_memory_metrics_agent:license"],
+    default_applicable_licenses = ["//:license"],
     default_visibility = ["//visibility:public"],
 )
 
@@ -11,11 +11,13 @@ cc_library(
     srcs = ["log_writer.cc"],
     hdrs = ["log_writer.h"],
     deps = [
-        "//third_party/absl/base:no_destructor",
-        "//third_party/absl/container:flat_hash_map",
-        "//third_party/absl/status",
-        "//third_party/absl/strings",
-        "//third_party/absl/strings:str_format",
+        "@com_google_absl//absl/base:no_destructor",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/synchronization",
     ],
 )
 
@@ -24,8 +26,8 @@ cc_test(
     srcs = ["log_writer_test.cc"],
     deps = [
         ":log_writer",
-        "//testing/base/public:gunit_main",
-        "//third_party/absl/strings",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_absl//absl/strings",
     ],
 )
 
@@ -35,7 +37,7 @@ cc_library(
     hdrs = ["sampling_engine.h"],
     linkopts = ["-lrt"],
     deps = [
-        "//third_party/absl/time",
+        "@com_google_absl//absl/time",
     ],
 )
 
@@ -44,7 +46,7 @@ cc_library(
     srcs = ["help_database.cc"],
     hdrs = ["help_database.h"],
     deps = [
-        "//third_party/absl/base:no_destructor",
+        "@com_google_absl//absl/base:no_destructor",
     ],
 )
 
@@ -53,7 +55,7 @@ cc_test(
     srcs = ["help_database_test.cc"],
     deps = [
         ":help_database",
-        "//testing/base/public:gunit_main",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -62,7 +64,7 @@ cc_library(
     srcs = ["report_engine.cc"],
     hdrs = ["report_engine.h"],
     deps = [
-        "//third_party/absl/strings",
+        "@com_google_absl//absl/strings",
     ],
 )
 
@@ -71,6 +73,6 @@ cc_test(
     srcs = ["report_engine_test.cc"],
     deps = [
         ":report_engine",
-        "//testing/base/public:gunit_main",
+        "@com_google_googletest//:gtest_main",
     ],
 )

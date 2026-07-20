@@ -1,4 +1,18 @@
-#include "third_party/guest_memory_metrics_agent/providers/cgroup_provider.h"
+// Copyright 2026 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "providers/cgroup_provider.h"
 
 #include <array>
 #include <cstddef>
@@ -10,14 +24,14 @@
 #include <system_error>
 #include <vector>
 
-#include "third_party/absl/algorithm/container.h"
-#include "third_party/absl/strings/match.h"
-#include "third_party/absl/strings/numbers.h"
-#include "third_party/absl/strings/str_cat.h"
-#include "third_party/absl/strings/str_split.h"
-#include "third_party/absl/time/clock.h"
-#include "third_party/absl/time/time.h"
-#include "third_party/guest_memory_metrics_agent/providers/metric_snapshot.h"
+#include "absl/algorithm/container.h"
+#include "absl/strings/match.h"
+#include "absl/strings/numbers.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_split.h"
+#include "absl/time/clock.h"
+#include "absl/time/time.h"
+#include "providers/metric_snapshot.h"
 
 namespace guest_memory_metrics {
 
@@ -125,14 +139,14 @@ MetricSnapshot CgroupProvider::GetSnapshot() const {
     if (absl::EndsWith(key, "memory.current")) {
       absl::string_view base = absl::string_view(key).substr(0, key.length() - 14);
       std::string usage_key = absl::StrCat(base, "memory.usage_in_bytes");
-      if (snapshot.metrics.contains(usage_key)) {
+      if (snapshot.metrics.count(usage_key) > 0) {
         keys_to_delete.push_back(usage_key);
       }
     }
     if (absl::EndsWith(key, "memory.max")) {
       absl::string_view base = absl::string_view(key).substr(0, key.length() - 10);
       std::string limit_key = absl::StrCat(base, "memory.limit_in_bytes");
-      if (snapshot.metrics.contains(limit_key)) {
+      if (snapshot.metrics.count(limit_key) > 0) {
         keys_to_delete.push_back(limit_key);
       }
     }
