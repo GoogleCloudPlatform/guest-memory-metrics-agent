@@ -57,7 +57,7 @@ MetricSnapshot CgroupProvider::GetSnapshot() const {
   std::error_code ec;
   bool is_v2_root = fs::exists(fs::path(base_path_) / "cgroup.controllers", ec);
   // If we are already inside a controller/hierarchy (e.g., pointed directly at
-  // /sys/fs/cgroup/memory on V1), we don't want to blacklist depth 0 subdirectories.
+  // /sys/fs/cgroup/memory on V1), we don't want to exclude depth 0 subdirectories.
   bool is_cgroup_node = fs::exists(fs::path(base_path_) / "cgroup.procs", ec) ||
                         fs::exists(fs::path(base_path_) / "tasks", ec);
   bool apply_blocklist = !is_v2_root && !is_cgroup_node;
