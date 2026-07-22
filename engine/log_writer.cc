@@ -393,11 +393,7 @@ std::string LogWriter::ScrubPath(const std::string& path) {
   {
     absl::MutexLock lock(&mutex_);
     if (scrub_cache_.size() >= kMaxCacheSize) {
-      size_t to_erase = kMaxCacheSize / 2;
-      auto it = scrub_cache_.begin();
-      while (to_erase-- > 0 && it != scrub_cache_.end()) {
-        scrub_cache_.erase(it++);
-      }
+      scrub_cache_.clear();
     }
     scrub_cache_.emplace(path, scrubbed);
   }

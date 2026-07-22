@@ -1,10 +1,10 @@
-load("//third_party/bazel_rules/rules_cc/cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:defs.bzl", "cc_binary")
 load("//tools/build_defs/license:license.bzl", "license")
 
 licenses(["notice"])
 
 package(
-    default_applicable_licenses = ["//third_party/guest_memory_metrics_agent:license"],
+    default_applicable_licenses = ["//:license"],
     default_visibility = ["//visibility:public"],
 )
 
@@ -20,9 +20,9 @@ cc_binary(
     srcs = ["main.cc"],
     linkstatic = True,
     deps = [
-        "//third_party/absl/flags:flag",
-        "//third_party/absl/flags:parse",
-        "//third_party/absl/time",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/flags:parse",
+        "@com_google_absl//absl/time",
         "//engine:help_database",
         "//engine:log_writer",
         "//engine:report_engine",

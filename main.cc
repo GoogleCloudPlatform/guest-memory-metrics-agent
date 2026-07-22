@@ -12,17 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <csignal>
 #include <cstdint>
+#include <ctime>
 #include <fstream>
 #include <future>  // NOLINT
 #include <iostream>
 #include <string>
 #include <vector>
 
-#include "third_party/absl/flags/flag.h"
-#include "third_party/absl/flags/parse.h"
-#include "third_party/absl/time/clock.h"
-#include "third_party/absl/time/time.h"
+#include "absl/flags/flag.h"
+#include "absl/flags/parse.h"
+#include "absl/time/clock.h"
+#include "absl/time/time.h"
 #include "engine/help_database.h"
 #include "engine/log_writer.h"
 #include "engine/report_engine.h"
@@ -107,12 +109,26 @@ int main(int argc, char* argv[]) {
       }
     };
 
+    sigset_t sigset;
+    sigemptyset(&sigset);
+    sigaddset(&sigset, SIGINT);
+    sigaddset(&sigset, SIGTERM);
+    pthread_sigmask(SIG_BLOCK, &sigset, nullptr);
+
     guest_memory_metrics::SamplingEngine engine(
         absl::GetFlag(FLAGS_sample), absl::GetFlag(FLAGS_memory_duration),
         sample_callback);
 
     engine.Start();
-    absl::SleepFor(absl::GetFlag(FLAGS_memory_duration) + absl::Seconds(1));
+
+    struct timespec timeout =
+        absl::ToTimespec(absl::GetFlag(FLAGS_memory_duration));
+    int sig = sigtimedwait(&sigset, nullptr, &timeout);
+    if (sig > 0) {
+      std::cout << "Received signal " << sig << ", shutting down gracefully..."
+                << std::endl;
+    }
+
     engine.Stop();
     log_writer.Close();
 
