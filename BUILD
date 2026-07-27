@@ -24,6 +24,7 @@ cc_binary(
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/time",
         "//engine:help_database",
+        "//engine:instance_lock",
         "//engine:log_writer",
         "//engine:report_engine",
         "//engine:sampling_engine",

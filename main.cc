@@ -19,6 +19,7 @@
 #include <future>  // NOLINT
 #include <iostream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "absl/flags/flag.h"
@@ -26,6 +27,7 @@
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "engine/help_database.h"
+#include "engine/instance_lock.h"
 #include "engine/log_writer.h"
 #include "engine/report_engine.h"
 #include "engine/sampling_engine.h"
@@ -53,6 +55,8 @@ int main(int argc, char* argv[]) {
 
   std::string mode = positional[1];
 
+  // Lock is acquired later depending on the sub-command mode.
+
   if (mode == "erase") {
     std::string output_path = absl::GetFlag(FLAGS_output);
     if (output_path.empty()) {
@@ -66,6 +70,18 @@ int main(int argc, char* argv[]) {
     }
     std::cout << "Erased log file: " << output_path << "\n";
   } else if (mode == "record") {
+    // Acquire global single-instance lock for the agent in stateful record mode
+    std::string lock_path = guest_memory_metrics::InstanceLock::GetLockPath();
+    auto instance_lock_or =
+        guest_memory_metrics::InstanceLock::TryAcquire(lock_path);
+    if (!instance_lock_or.ok()) {
+      std::cerr << "Failed to start agent: "
+                << instance_lock_or.status().message() << std::endl;
+      return 8;
+    }
+    guest_memory_metrics::InstanceLock global_instance_lock =
+        std::move(*instance_lock_or);
+
     std::cout << "Kernel Metrics Agent Started in Record Mode!" << std::endl;
     std::cout << "Recording duration: " << absl::GetFlag(FLAGS_memory_duration)
               << std::endl;

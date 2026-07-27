@@ -40,6 +40,92 @@ distinct modes:
   snapshots and free up disk space on their VMs when the logs are no longer
   needed.
 
+### How the PII Scrubber Works
+The embedded PII scrubber continuously anonymizes cgroups, procfs, and system memory metrics across Linux guest VMs and container environments to prevent the leakage of tenant topology. This is specifically needed as raw metric paths frequently contain user directories, user IDs, container IDs, Kubernetes pod names, and custom user cgroup names.
+
+<details>
+<summary><b>Technical Data: PII Scrubber Internals</b></summary>
+
+#### Concrete Transformation Examples
+
+| Raw Input Path | Scrubbed Output Path | Explanation / Behavior |
+| :---: | :---: | :---: |
+| `proc/meminfo/MemFree` | `proc/meminfo/MemFree` | Allowed: Known kernel metric tokens in `kAllowList`. |
+| `cgroup/cpu0/usage_in_bytes` | `cgroup/cpu0/usage_in_bytes` | Allowed: Metric prefix `cpu` + trailing digits `0` permitted. |
+| `sys/node1/memory.stat` | `sys/node1/memory.stat` | Allowed: Metric prefix `node` + trailing digits `1` permitted. |
+| `net/eth0/stat` | `net/eth0/stat` | Allowed: Metric prefix `eth` + trailing digits `0` permitted. |
+| `disk/nvme0n1/stat` | `disk/nvme0n1/stat` | Allowed: NVMe drive naming scheme (`nvme` + `0` + `n` + `1`). |
+| `block/sda1/stat` | `block/sda1/stat` | Allowed: SCSI/VirtIO block device scheme (`sd` + `a` + `1`). |
+| `/home/johndoe/proc/meminfo` | `/home/[REDACTED]/proc/meminfo` | Redacted: User directory `/home/johndoe` redacted; trailing metric `proc/meminfo` preserved. |
+| `/users/alice/` | `/users/[REDACTED]` | Redacted: User directory `/users/alice` redacted without trailing metric. |
+| `cgroup/pod12345/memory.stat` | `cgroup/pod[HASH:9f8e7d6c5b4a3210]` | Hashed: Structural prefix `pod` + digits `12345` hashed to prevent numeric ID bypass. |
+| `sys/user1000/cpu.stat` | `sys/user[HASH:1a2b3c4d5e6f7a8b]` | Hashed: Structural prefix `user` + digits `1000` hashed to prevent numeric UID bypass. |
+| `cgroup/Bob_App/memory.current` | `cgroup/[HASH:4f3e2d1c0b9a8f7e]` | Hashed: Custom application cgroup `Bob_App` defaults to salted FNV-1a hash. |
+| `docker-a1b2c3d4e5f6` | `docker-[HASH:8c7b6a5f4e3d2c1b]` | Hashed: Container ID prefix `docker-` preserved; random hash output. |
+
+#### Implementation Flowchart
+
+| 1. Input & Tokenization |
+| :--- |
+| **[Input]** Raw Metric Path Input<br/>↓<br/>**[Step 1]** User Directory Scan (`/home/` & `/users/`) ➔ Redact user subdirectories, preserve trailing metric keywords<br/>↓<br/>**[Step 2]** O(N) Tokenizer ➔ Split string by `/` and `.` |
+| **2. Token Decision Tree** |
+| *Decision 1: Is Token in `kAllowList`?*<br/>YES ➔ [Keep Verbatim] (e.g., `cgroup`, `proc`) |
+| *Decision 2: Digits Check — Does prefix match pure metric? (`cpu`, `node`, `eth`, `sd`, `nvme`)*<br/>YES ➔ [Keep Verbatim] (e.g., `cpu0`, `sda1`, `nvme0n1`) |
+| *Decision 3: Matches Contextual Prefix? (`pod`, `user-`, `session-`, `docker-`, etc.)*<br/>YES ➔ Emit prefix + `[HASH: SaltedFNV1a(suffix)]`<br/>NO ➔ Emit `[HASH: SaltedFNV1a(token)]` |
+| **3. Cache & Output** |
+| Reconstruct Delimiters & Write to Mutex-Guarded SwissTable Cache<br/>↓<br/>Output Strict RFC 8259 JSON Escaped Line |
+
+#### 1. Machine-Salted FNV-1a Hash
+
+The scrubber seeds its hash using `/etc/machine-id`. This prevents cross-machine rainbow table attacks while preserving time-series metric cardinality on the same host across agent restarts.
+
+```cpp
+static const uint64_t kHashSalt = []() -> uint64_t {
+    std::ifstream f("/etc/machine-id");
+    std::string id;
+    if (f >> id && !id.empty()) {
+        uint64_t hash = 0xcbf29ce484222325ULL;
+        for (char c : id) {
+            hash ^= static_cast<uint64_t>(static_cast<uint8_t>(c));
+            hash *= 0x100000001b3ULL;
+        }
+        return hash;
+    }
+    return 0xcbf29ce484222325ULL;
+}();
+```
+
+#### 2. Restricting Digit Suffixes to Physical Metrics
+
+Trailing digits are permitted only if the prefix belongs to `kMetricAllowList` (`cpu`, `node`, `eth`, `nvme`, `sd`, `vd`). Structural folders like `pod1234` or `user1000` fail this test and are hashed.
+
+```cpp
+auto is_allowed_token =
+    [&](const std::string& lower_tok,
+        const absl::flat_hash_set<std::string>& allow_set) -> bool {
+    if (allow_set.contains(lower_tok)) return true;
+    size_t first_digit = lower_tok.find_first_of("0123456789");
+    if (first_digit != std::string::npos && first_digit > 0) {
+        std::string prefix = lower_tok.substr(0, first_digit);
+        // Only allow dynamic trailing digits for pure metric endpoints
+        if (kMetricAllowList->contains(prefix)) {
+            std::string suffix = lower_tok.substr(first_digit);
+            if (prefix == "nvme") {
+                // Validate nvme0n1 format
+                ...
+            }
+            bool all_digits = true;
+            for (char d : suffix) {
+                if (d < '0' || d > '9') { all_digits = false; break; }
+            }
+            if (all_digits) return true;
+        }
+    }
+    return false;
+};
+```
+</details>
+
 ### Intended Users
 This tool is expressly built for:
 

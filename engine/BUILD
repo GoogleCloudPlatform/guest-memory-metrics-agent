@@ -76,3 +76,26 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+cc_library(
+    name = "instance_lock",
+    srcs = ["instance_lock.cc"],
+    hdrs = ["instance_lock.h"],
+    deps = [
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+    ],
+)
+
+cc_test(
+    name = "instance_lock_test",
+    srcs = ["instance_lock_test.cc"],
+    deps = [
+        ":instance_lock",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+    ],
+)
