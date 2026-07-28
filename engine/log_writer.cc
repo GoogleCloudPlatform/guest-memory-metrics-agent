@@ -38,7 +38,7 @@ LogWriter::LogWriter(const std::string& output_path)
 LogWriter::~LogWriter() { Close(); }
 
 absl::Status LogWriter::Open() {
-  absl::MutexLock lock(&io_mutex_);
+  absl::MutexLock lock(io_mutex_);
   if (output_path_.empty()) {
     // If no path is provided, we'll write to stdout
     return absl::OkStatus();
@@ -53,7 +53,7 @@ absl::Status LogWriter::Open() {
 }
 
 void LogWriter::Close() {
-  absl::MutexLock lock(&io_mutex_);
+  absl::MutexLock lock(io_mutex_);
   if (out_stream_.is_open()) {
     out_stream_.close();
   }
@@ -61,7 +61,7 @@ void LogWriter::Close() {
 
 std::string LogWriter::ScrubPath(const std::string& path) {
   {
-    absl::MutexLock lock(&mutex_);
+    absl::MutexLock lock(mutex_);
     auto it = scrub_cache_.find(path);
     if (it != scrub_cache_.end()) {
       return it->second;
@@ -391,7 +391,7 @@ std::string LogWriter::ScrubPath(const std::string& path) {
   }
 
   {
-    absl::MutexLock lock(&mutex_);
+    absl::MutexLock lock(mutex_);
     if (scrub_cache_.size() >= kMaxCacheSize) {
       scrub_cache_.clear();
     }
@@ -453,7 +453,7 @@ void LogWriter::WriteMetric(int64_t timestamp, const std::string& source,
 
   // FIX 5: Use a separate io_mutex_ here so disk I/O doesn't freeze the
   // scrubbing cache
-  absl::MutexLock lock(&io_mutex_);
+  absl::MutexLock lock(io_mutex_);
   if (out_stream_.is_open()) {
     out_stream_ << line;
   } else {
