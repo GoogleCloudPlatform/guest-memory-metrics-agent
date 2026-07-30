@@ -15,8 +15,9 @@
 #ifndef GUEST_MEMORY_METRICS_AGENT_SAMPLING_ENGINE_H_
 #define GUEST_MEMORY_METRICS_AGENT_SAMPLING_ENGINE_H_
 
-#include <atomic>
+#include <condition_variable>  // NOLINT(build/c++11)
 #include <functional>
+#include <mutex>  // NOLINT(build/c++11)
 #include <thread>  // NOLINT
 
 #include "absl/time/time.h"
@@ -38,7 +39,10 @@ class SamplingEngine {
   absl::Duration interval_;
   absl::Duration duration_;
   std::function<void()> callback_;
-  std::atomic<bool> running_;
+
+  bool running_;
+  std::mutex mutex_;            // NOLINT(build/c++11)
+  std::condition_variable cv_;  // NOLINT(build/c++11)
   std::thread thread_;
 };
 

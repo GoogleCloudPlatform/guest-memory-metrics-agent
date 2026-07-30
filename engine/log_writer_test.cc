@@ -14,10 +14,14 @@
 
 #include "engine/log_writer.h"
 
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include <fstream>
 #include <string>
 
 #include "gtest/gtest.h"
+#include "absl/status/status.h"
 #include "absl/strings/match.h"
 
 namespace guest_memory_metrics {
@@ -266,7 +270,7 @@ TEST(LogWriterTest, ScrubCustomCgroupTokenAllowlist) {
   testing::internal::CaptureStdout();
   writer.WriteMetric(123, "host", "cgroup/Bob_App/memory.current", 123);
   std::string output = testing::internal::GetCapturedStdout();
-  EXPECT_TRUE(output.find("Bob_App") == std::string::npos);
+  EXPECT_TRUE(!absl::StrContains(output, "Bob_App"));
   EXPECT_TRUE(absl::StrContains(output, "cgroup/[HASH:"));
 }
 
@@ -275,8 +279,8 @@ TEST(LogWriterTest, ScrubConsecutiveProcPids) {
   testing::internal::CaptureStdout();
   writer.WriteMetric(9999, "host", "/proc/12345/proc/67890/memory.stat", 8888);
   std::string output = testing::internal::GetCapturedStdout();
-  EXPECT_TRUE(output.find("12345") == std::string::npos);
-  EXPECT_TRUE(output.find("67890") == std::string::npos);
+  EXPECT_TRUE(!absl::StrContains(output, "12345"));
+  EXPECT_TRUE(!absl::StrContains(output, "67890"));
   EXPECT_TRUE(absl::StrContains(output, "/proc/[HASH:"));
 }
 
@@ -363,6 +367,20 @@ TEST(LogWriterTest, ScrubCacheEvictionFiresWhenFull) {
   }
   std::string output = testing::internal::GetCapturedStdout();
   EXPECT_FALSE(output.empty());
+}
+
+TEST(LogWriterTest, UnwritableDestinationHandling) {
+  std::string read_only_dir = testing::TempDir() + "/unwritable_log_dir";
+  mkdir(read_only_dir.c_str(), 0555);
+
+  LogWriter writer(read_only_dir + "/unwritable.log");
+  absl::Status status = writer.Open();
+  EXPECT_FALSE(status.ok());
+  EXPECT_TRUE(absl::IsInternal(status));
+  EXPECT_TRUE(
+      absl::StrContains(status.message(), "Failed to open output log file"));
+
+  rmdir(read_only_dir.c_str());
 }
 
 }  // namespace

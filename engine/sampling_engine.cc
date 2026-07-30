@@ -14,13 +14,10 @@
 
 #include "engine/sampling_engine.h"
 
+#include <algorithm>
 #include <chrono>  // NOLINT
-#include <errno.h>
-#include <signal.h>
-#include <time.h>
-
 #include <functional>
-#include <iostream>
+#include <mutex>  // NOLINT(build/c++11)
 #include <utility>
 
 #include "absl/time/time.h"
@@ -37,93 +34,72 @@ SamplingEngine::SamplingEngine(absl::Duration interval, absl::Duration duration,
 SamplingEngine::~SamplingEngine() { Stop(); }
 
 void SamplingEngine::Start() {
-  running_ = true;
-
-  // Block SIGALRM before creating the thread so the main thread and
-  // the new thread both have it blocked. This prevents the OS from
-  // delivering the signal to the main thread and terminating the process.
-  sigset_t sigset;
-  sigemptyset(&sigset);
-  sigaddset(&sigset, SIGALRM);
-  pthread_sigmask(SIG_BLOCK, &sigset, nullptr);
-
+  {
+    std::lock_guard<std::mutex> lock(mutex_);  // NOLINT(build/c++11)
+    if (running_) return;
+    running_ = true;
+  }
+  if (thread_.joinable()) {
+    thread_.join();
+  }
   thread_ = std::thread(&SamplingEngine::Loop, this);
 }
 
 void SamplingEngine::Stop() {
-  if (running_.exchange(false)) {
-    if (thread_.joinable()) {
-      thread_.join();
-    }
+  {
+    std::lock_guard<std::mutex> lock(mutex_);  // NOLINT(build/c++11)
+    running_ = false;
+  }
+  cv_.notify_one();
+  if (thread_.joinable()) {
+    thread_.join();
   }
 }
 
 void SamplingEngine::Loop() {
-  sigset_t sigset;
-  sigemptyset(&sigset);
-  sigaddset(&sigset, SIGALRM);
-
-  // Block SIGALRM in this thread so sigwait/sigtimedwait can catch it
-  pthread_sigmask(SIG_BLOCK, &sigset, nullptr);
-
-  struct sigevent sev;
-  timer_t timerid;
-
-  sev.sigev_notify = SIGEV_SIGNAL;
-  sev.sigev_signo = SIGALRM;
-  sev.sigev_value.sival_ptr = &timerid;
-
-  if (timer_create(CLOCK_MONOTONIC, &sev, &timerid) == -1) {
-    std::cerr << "Failed to create timer" << std::endl;
-    return;
-  }
-
-  struct itimerspec its;
-  its.it_value = absl::ToTimespec(interval_);
-  its.it_interval = absl::ToTimespec(interval_);
-
-  if (timer_settime(timerid, 0, &its, nullptr) == -1) {
-    std::cerr << "Failed to set timer" << std::endl;
-    timer_delete(timerid);
-    return;
-  }
-
   auto start_time = std::chrono::steady_clock::now();
   auto duration_ns =
       std::chrono::nanoseconds(absl::ToInt64Nanoseconds(duration_));
   auto end_time = start_time + duration_ns;
 
-  while (running_ && std::chrono::steady_clock::now() < end_time) {
-    auto now = std::chrono::steady_clock::now();
-    absl::Duration wait_duration = interval_;
-    if (wait_duration <= absl::ZeroDuration()) {
-      wait_duration = absl::Seconds(1);
-    }
-    auto remaining_ns =
-        std::chrono::duration_cast<std::chrono::nanoseconds>(end_time - now);
-    if (remaining_ns.count() > 0) {
-      absl::Duration remaining_duration =
-          absl::Nanoseconds(remaining_ns.count());
-      if (wait_duration > remaining_duration) {
-        wait_duration = remaining_duration;
-      }
-    }
-    struct timespec timeout = absl::ToTimespec(wait_duration);
-    if (timeout.tv_sec <= 0 && timeout.tv_nsec <= 0) {
-      timeout.tv_sec = 0;
-      timeout.tv_nsec = 1000000;
-    }
-    int ret = sigtimedwait(&sigset, nullptr, &timeout);
-
-    if (ret == SIGALRM) {
-      callback_();
-    } else if (ret == -1 && errno == EAGAIN) {
-      // Timeout, loop back and check conditions
-      continue;
-    }
+  auto interval_ns =
+      std::chrono::nanoseconds(absl::ToInt64Nanoseconds(interval_));
+  if (interval_ns.count() <= 0) {
+    interval_ns = std::chrono::seconds(1);
   }
 
-  timer_delete(timerid);
+  std::unique_lock<std::mutex> lock(mutex_);  // NOLINT(build/c++11)
+  auto next_tick = start_time + interval_ns;
+
+  while (running_) {
+    auto now = std::chrono::steady_clock::now();
+    if (now >= end_time) {
+      break;
+    }
+
+    auto wait_until_time = std::min(next_tick, end_time);
+
+    bool stopped =
+        cv_.wait_until(lock, wait_until_time, [this] { return !running_; });
+    if (stopped) {
+      break;
+    }
+
+    now = std::chrono::steady_clock::now();
+    if (now >= next_tick) {
+      lock.unlock();
+      callback_();
+      lock.lock();
+      // Calculate the next tick safely, preventing drift.
+      next_tick += interval_ns;
+
+      // If callback took too long and we missed multiple ticks, catch up.
+      if (next_tick <= now) {
+        next_tick = now + interval_ns;
+      }
+    }
+  }
+  running_ = false;
 }
 
 }  // namespace guest_memory_metrics

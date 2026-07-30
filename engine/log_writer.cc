@@ -20,12 +20,12 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <string_view>
 
 #include "absl/base/no_destructor.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/strings/ascii.h"
-#include "absl/strings/escaping.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_format.h"
 #include "absl/synchronization/mutex.h"
@@ -405,46 +405,61 @@ void LogWriter::WriteMetric(int64_t timestamp, const std::string& source,
                             const std::string& metric_name, uint64_t value) {
   std::string scrubbed_name = ScrubPath(metric_name);
 
-  // FIX 2: Strict JSON RFC 8259 Compliant Escaping
-  auto json_escape = [](const std::string& input) {
-    std::string output;
-    output.reserve(input.length() + 16);
+  // FIX 2: Strict JSON RFC 8259 Compliant Escaping with Zero-Allocation
+  // Fast-Path
+  auto json_escape = [](std::string_view input,
+                        std::string* scratch) -> std::string_view {
+    bool needs_escape = false;
+    for (unsigned char c : input) {
+      if (c == '"' || c == '\\' || c < 0x20) {
+        needs_escape = true;
+        break;
+      }
+    }
+    if (!needs_escape) {
+      return input;
+    }
+
+    scratch->clear();
+    scratch->reserve(input.length() + 16);
     for (unsigned char c : input) {
       switch (c) {
         case '"':
-          output += "\\\"";
+          *scratch += "\\\"";
           break;
         case '\\':
-          output += "\\\\";
+          *scratch += "\\\\";
           break;
         case '\b':
-          output += "\\b";
+          *scratch += "\\b";
           break;
         case '\f':
-          output += "\\f";
+          *scratch += "\\f";
           break;
         case '\n':
-          output += "\\n";
+          *scratch += "\\n";
           break;
         case '\r':
-          output += "\\r";
+          *scratch += "\\r";
           break;
         case '\t':
-          output += "\\t";
+          *scratch += "\\t";
           break;
         default:
           if (c < 0x20) {
-            output += absl::StrFormat("\\u%04x", c);
+            *scratch += absl::StrFormat("\\u%04x", c);
           } else {
-            output += c;
+            *scratch += c;
           }
       }
     }
-    return output;
+    return *scratch;
   };
 
-  std::string escaped_source = json_escape(source);
-  std::string escaped_metric = json_escape(scrubbed_name);
+  std::string source_scratch;
+  std::string metric_scratch;
+  std::string_view escaped_source = json_escape(source, &source_scratch);
+  std::string_view escaped_metric = json_escape(scrubbed_name, &metric_scratch);
 
   std::string line = absl::StrFormat(
       "{\"timestamp\": %v, \"source\": \"%s\", \"metric\": \"%s\", \"value\": "

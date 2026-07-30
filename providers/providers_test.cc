@@ -12,11 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <sys/resource.h>
+
 #include <atomic>
+#include <chrono>  // NOLINT(build/c++11)
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>  // NOLINT
 #include <fstream>
+#include <iostream>
 #include <limits>
 #include <string>
 #include <system_error>  // NOLINT(build/c++11)
@@ -816,6 +820,86 @@ TEST_F(ProvidersTest, NumaProviderMissingUnits) {
   NumaProvider provider(sys_dir.string());
   auto snapshot = provider.GetSnapshot();
   EXPECT_EQ(snapshot.metrics["numa.node0.Active"], 4096ULL);
+}
+
+TEST_F(ProvidersTest, CgroupV2_RapidChurnStressTest) {
+  fs::path cgroup_dir = temp_dir_ / "cgroup_churn_test";
+  fs::create_directories(cgroup_dir);
+
+  // Enable v2 root controller file
+  {
+    std::ofstream controllers(cgroup_dir / "cgroup.controllers");
+    controllers << "memory cpu\n";
+  }
+  struct rusage init_usage;
+  getrusage(RUSAGE_SELF, &init_usage);
+  std::cout << "[>>>] Baseline Process RSS before churn test: "
+            << init_usage.ru_maxrss << " KB\n";
+
+  std::atomic<bool> stop_churn{false};
+
+  // 1. Background Workload Thread (Simulates rapid container create/destroy)
+  std::thread churn_thread([&]() {
+    int counter = 0;
+    while (!stop_churn.load()) {
+      fs::path container_dir =
+          cgroup_dir / ("container_" + std::to_string(counter));
+
+      // Rapid Create
+      std::error_code ec;
+      fs::create_directories(container_dir, ec);
+      {
+        std::ofstream current(container_dir / "memory.current");
+        current << "1048576\n";
+      }
+      {
+        std::ofstream stat(container_dir / "memory.stat");
+        stat << "anon 524288\nfile 524288\n";
+      }
+
+      // Small delay before destruction
+      std::this_thread::sleep_for(std::chrono::milliseconds(5));
+
+      // Rapid Destroy (triggers ENOENT while GetSnapshot() is traversing)
+      fs::remove_all(container_dir, ec);
+
+      counter++;
+    }
+  });
+
+  // 2. Main Agent Traversal Loop (Run for 3 seconds of continuous churn)
+  CgroupProvider provider(cgroup_dir.string());
+  auto start_time = std::chrono::steady_clock::now();
+  int snapshot_count = 0;
+
+  while (std::chrono::steady_clock::now() - start_time <
+         std::chrono::seconds(3)) {
+    // Must handle ENOENT gracefully and not throw unhandled exceptions
+    EXPECT_NO_THROW({
+      MetricSnapshot snapshot = provider.GetSnapshot();
+      snapshot_count++;
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+
+  stop_churn.store(true);
+  churn_thread.join();
+
+  // Resource Assertions
+  struct rusage final_usage;
+  getrusage(RUSAGE_SELF, &final_usage);
+
+  std::cout << "[>>>] Final Process RSS after churn test: "
+            << final_usage.ru_maxrss << " KB\n";
+
+  int64_t delta_rss = final_usage.ru_maxrss - init_usage.ru_maxrss;
+  std::cout << "[>>>] Delta RSS added during test: " << delta_rss << " KB\n";
+
+  EXPECT_LT(delta_rss, 15360) << "Memory delta exceeded 15MB limit during high "
+                                 "cgroup churn! Growth was: "
+                              << delta_rss << " KB";
+
+  EXPECT_GT(snapshot_count, 0);
 }
 
 }  // namespace

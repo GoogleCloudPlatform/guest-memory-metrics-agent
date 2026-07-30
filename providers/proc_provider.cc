@@ -41,9 +41,13 @@ MetricSnapshot ProcProvider::GetSnapshot() const {
     std::ifstream file(path);
     if (!file.is_open()) return;
     std::string line;
+    std::vector<std::string_view> tokens;
     while (std::getline(file, line)) {
-      std::vector<std::string_view> tokens =
-          absl::StrSplit(line, absl::ByAnyChar(" \t"), absl::SkipEmpty());
+      tokens.clear();
+      for (absl::string_view token :
+           absl::StrSplit(line, absl::ByAnyChar(" \t"), absl::SkipEmpty())) {
+        tokens.push_back(token);
+      }
       if (tokens.size() >= 2) {
         std::string_view key = tokens[0];
         if (!key.empty() && key.back() == ':') {

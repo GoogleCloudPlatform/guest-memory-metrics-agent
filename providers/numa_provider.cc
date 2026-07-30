@@ -65,9 +65,13 @@ MetricSnapshot NumaProvider::GetSnapshot() const {
         std::ifstream file(meminfo_path);
         if (file.is_open()) {
           std::string line;
+          std::vector<std::string_view> tokens;
           while (std::getline(file, line)) {
-            std::vector<std::string_view> tokens =
-                absl::StrSplit(line, absl::ByAnyChar(" \t"), absl::SkipEmpty());
+            tokens.clear();
+            for (absl::string_view token : absl::StrSplit(
+                     line, absl::ByAnyChar(" \t"), absl::SkipEmpty())) {
+              tokens.push_back(token);
+            }
             if (tokens.empty()) continue;
 
             size_t val_idx = 0;

@@ -21,20 +21,20 @@
 
 #include "gtest/gtest.h"
 #include "absl/status/status.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 
 namespace guest_memory_metrics {
 namespace {
 
 TEST(InstanceLockTest, GetLockPathDefault) {
-  EXPECT_EQ(InstanceLock::GetLockPath(""),
-            absl::StrCat("/tmp/guest_memory_metrics_agent_", getuid(),
-                         ".lock"));
+  EXPECT_EQ(
+      InstanceLock::GetLockPath(""),
+      absl::StrCat("/tmp/guest_memory_metrics_agent_", getuid(), ".lock"));
 }
 
 TEST(InstanceLockTest, GetLockPathCustom) {
-  EXPECT_EQ(InstanceLock::GetLockPath("/tmp/custom.lock"),
-            "/tmp/custom.lock");
+  EXPECT_EQ(InstanceLock::GetLockPath("/tmp/custom.lock"), "/tmp/custom.lock");
 }
 
 TEST(InstanceLockTest, AcquireAndReleaseLock) {
@@ -84,6 +84,32 @@ TEST(InstanceLockTest, ManualUnlock) {
   EXPECT_TRUE(second_lock_or.ok());
 
   unlink(lock_path.c_str());
+}
+
+TEST(InstanceLockTest, SymlinkAttackProtection) {
+  std::string target_path =
+      absl::StrCat(testing::TempDir(), "/test_instance_lock_target.txt");
+  std::string symlink_path =
+      absl::StrCat(testing::TempDir(), "/test_instance_lock_symlink.lock");
+  unlink(target_path.c_str());
+  unlink(symlink_path.c_str());
+
+  // Create target file
+  std::ofstream ofs(target_path);
+  ofs << "target file content";
+  ofs.close();
+
+  // Create symlink pointing to target
+  ASSERT_EQ(symlink(target_path.c_str(), symlink_path.c_str()), 0);
+
+  // Attempting to acquire lock on a symlink must fail with PermissionDenied
+  auto lock_or = InstanceLock::TryAcquire(symlink_path);
+  EXPECT_FALSE(lock_or.ok());
+  EXPECT_TRUE(absl::IsPermissionDenied(lock_or.status()));
+  EXPECT_TRUE(absl::StrContains(lock_or.status().message(), "symlink"));
+
+  unlink(symlink_path.c_str());
+  unlink(target_path.c_str());
 }
 
 }  // namespace

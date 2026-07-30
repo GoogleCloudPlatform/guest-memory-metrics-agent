@@ -105,9 +105,13 @@ MetricSnapshot CgroupProvider::GetSnapshot() const {
 
           if (filename == "memory.stat") {
             std::string line;
+            std::vector<std::string_view> tokens;
             while (std::getline(file, line)) {
-              std::vector<std::string_view> tokens =
-                  absl::StrSplit(line, absl::ByAnyChar(" \t"), absl::SkipEmpty());
+              tokens.clear();
+              for (absl::string_view token : absl::StrSplit(
+                       line, absl::ByAnyChar(" \t"), absl::SkipEmpty())) {
+                tokens.push_back(token);
+              }
               if (tokens.size() >= 2) {
                 int64_t signed_value;
                 if (absl::SimpleAtoi(tokens[1], &signed_value)) {

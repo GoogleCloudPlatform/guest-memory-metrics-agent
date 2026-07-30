@@ -21,12 +21,12 @@
 #include <iomanip>
 #include <iostream>
 #include <map>
-#include <regex>  // NOLINT
 #include <set>
 #include <string>
-#include <vector>
 
 #include "absl/strings/numbers.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
 
 namespace guest_memory_metrics {
 
@@ -49,12 +49,6 @@ void ReportEngine::GenerateReport(const std::string& input_path,
     return;
   }
 
-  // Regex to match: {"timestamp": 123, "source": "...", "metric": "...",
-  // "value": 456}
-  std::regex line_regex(
-      R"regex(\{"timestamp":\s*(\d+),\s*"source":\s*"([^"]+)",\s*"metric":\s*"([^"]+)",\s*"value":\s*(\d+)\})regex");
-  std::smatch match;
-
   std::string line;
   int64_t closest_start_diff = -1;
   int64_t closest_end_diff = -1;
@@ -64,58 +58,82 @@ void ReportEngine::GenerateReport(const std::string& input_path,
     std::map<std::string, uint64_t> metrics;
   };
 
-  std::vector<Snapshot> snapshots;
   Snapshot current_snapshot;
   current_snapshot.timestamp = -1;
 
-  while (std::getline(file, line)) {
-    if (std::regex_search(line, match, line_regex)) {
-      int64_t ts = 0;
-      uint64_t value = 0;
-      if (!absl::SimpleAtoi(match[1].str(), &ts) ||
-          !absl::SimpleAtoi(match[4].str(), &value)) {
-        continue;
-      }
-      std::string source = match[2];
-      std::string metric = match[3];
+  Snapshot best_start_snap;
+  Snapshot best_end_snap;
+  bool has_snapshots = false;
 
-      std::string full_metric = source + "." + metric;
+  auto process_snapshot = [&]() {
+    if (current_snapshot.timestamp == -1) return;
+    has_snapshots = true;
 
-      if (ts != current_snapshot.timestamp) {
-        if (current_snapshot.timestamp != -1) {
-          snapshots.push_back(current_snapshot);
-        }
-        current_snapshot.timestamp = ts;
-        current_snapshot.metrics.clear();
-      }
-      current_snapshot.metrics[full_metric] = value;
+    int64_t s_diff = std::abs(current_snapshot.timestamp - start_ts);
+    int64_t e_diff = std::abs(current_snapshot.timestamp - end_ts);
+
+    if (closest_start_diff == -1 || s_diff < closest_start_diff) {
+      closest_start_diff = s_diff;
+      best_start_snap = current_snapshot;
     }
-  }
-  if (current_snapshot.timestamp != -1) {
-    snapshots.push_back(current_snapshot);
-  }
+    if (closest_end_diff == -1 || e_diff < closest_end_diff) {
+      closest_end_diff = e_diff;
+      best_end_snap = current_snapshot;
+    }
+  };
 
-  if (snapshots.empty()) {
+  while (std::getline(file, line)) {
+    absl::string_view sv(line);
+
+    size_t ts_pos = sv.find("\"timestamp\": ");
+    if (ts_pos == absl::string_view::npos) continue;
+    ts_pos += 13;
+
+    size_t src_pos = sv.find(", \"source\": \"", ts_pos);
+    if (src_pos == absl::string_view::npos) continue;
+    absl::string_view ts_str = sv.substr(ts_pos, src_pos - ts_pos);
+    src_pos += 13;
+
+    size_t metric_pos = sv.find("\", \"metric\": \"", src_pos);
+    if (metric_pos == absl::string_view::npos) continue;
+    absl::string_view source_str = sv.substr(src_pos, metric_pos - src_pos);
+    metric_pos += 14;
+
+    size_t val_pos = sv.find("\", \"value\": ", metric_pos);
+    if (val_pos == absl::string_view::npos) continue;
+    absl::string_view metric_str = sv.substr(metric_pos, val_pos - metric_pos);
+    val_pos += 12;
+
+    size_t end_pos = sv.find('}', val_pos);
+    if (end_pos == absl::string_view::npos) continue;
+    absl::string_view val_str = sv.substr(val_pos, end_pos - val_pos);
+
+    int64_t ts = 0;
+    uint64_t value = 0;
+    if (!absl::SimpleAtoi(ts_str, &ts) || !absl::SimpleAtoi(val_str, &value)) {
+      continue;
+    }
+
+    // Use absl::StrCat to concatenate string_views with a single allocation
+    // of exact size.
+    std::string full_metric = absl::StrCat(source_str, ".", metric_str);
+
+    if (ts != current_snapshot.timestamp) {
+      process_snapshot();
+      current_snapshot.timestamp = ts;
+      current_snapshot.metrics.clear();
+    }
+    current_snapshot.metrics[full_metric] = value;
+  }
+  process_snapshot();
+
+  if (!has_snapshots) {
     std::cerr << "No valid snapshots found in log." << std::endl;
     return;
   }
 
-  Snapshot* best_start = &snapshots[0];
-  Snapshot* best_end = &snapshots[0];
-
-  for (auto& snap : snapshots) {
-    int64_t s_diff = std::abs(snap.timestamp - start_ts);
-    int64_t e_diff = std::abs(snap.timestamp - end_ts);
-
-    if (closest_start_diff == -1 || s_diff < closest_start_diff) {
-      closest_start_diff = s_diff;
-      best_start = &snap;
-    }
-    if (closest_end_diff == -1 || e_diff < closest_end_diff) {
-      closest_end_diff = e_diff;
-      best_end = &snap;
-    }
-  }
+  Snapshot* best_start = &best_start_snap;
+  Snapshot* best_end = &best_end_snap;
 
   std::set<std::string> all_metrics;
   for (const auto& [metric, _] : best_start->metrics) all_metrics.insert(metric);
