@@ -30,7 +30,7 @@ OUTPUT_LOG="${3:-/tmp/memory_metrics.log}"
 echo "Building the Guest Memory Metrics Agent..."
 # Fallback between Bazel and Blaze
 BUILD_CMD="${BUILD_CMD:-$(command -v bazel || command -v blaze)}"
-$BUILD_CMD build --features=fully_static_link //third_party/guest_memory_metrics_agent:kernel_metrics_agent
+$BUILD_CMD build --features=fully_static_link //:kernel_metrics_agent
 
 echo "Starting record mode for $DURATION with $INTERVAL sampling intervals."
 echo "Output will be saved to: $OUTPUT_LOG"
