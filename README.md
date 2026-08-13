@@ -269,6 +269,36 @@ sudo kernel_metrics_agent erase --output=/var/log/guest-memory-metrics-agent/met
 *(You can then run `sudo systemctl start guest-memory-metrics-agent.service`
 whenever you are ready to begin recording metrics again.)*
 
+### 9. Uninstallation
+
+Because the agent is a single, statically-linked binary with zero external dependencies, uninstallation is incredibly fast and leaves no trace on the VM.
+
+**Scenario 1: Uninstalling the Background Daemon (systemd)**
+```bash
+# 1. Stop and disable the background service
+sudo systemctl disable --now guest-memory-metrics-agent.service
+
+# 2. (Optional) Safely erase telemetry history
+sudo kernel_metrics_agent erase --output=/var/log/guest-memory-metrics-agent/metrics.log
+
+# 3. Delete the configuration files, logs, and binary
+sudo rm -f /etc/systemd/system/guest-memory-metrics-agent.service
+sudo rm -f /usr/local/bin/kernel_metrics_agent
+sudo rm -rf /var/log/guest-memory-metrics-agent/
+
+# 4. Reload systemd state
+sudo systemctl daemon-reload
+```
+
+**Scenario 2: Uninstalling an Ad-Hoc / Foreground Run**
+```bash
+# Safely clear the logs
+sudo /tmp/kernel_metrics_agent erase --output=/tmp/metrics.log
+
+# Delete the downloaded binary and log file
+rm -f /tmp/kernel_metrics_agent /tmp/metrics.log
+```
+
 ## Deployment and Terms
 
 This tool is designed to be executed within [Google Compute Engine (GCE)
