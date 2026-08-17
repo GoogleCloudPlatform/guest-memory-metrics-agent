@@ -136,46 +136,63 @@ This tool is expressly built for:
   gather PII-scrubbed diagnostic data during support escalations, eliminating
   the reliance on custom, ad-hoc shell scripts.
 
-## Build and Usage Instructions
+## Installation and Usage Instructions
 
-### 1. Building the Agent
-To ensure the binary runs correctly on standard Linux environments (without
-relying on custom dynamic linkers), it must be built statically.
+### 1. Fast Binary Installation (Recommended)
+Pre-compiled, fully statically linked standalone binaries are available for each release across both `x86_64` (AMD64) and `aarch64` (ARM64) architectures. No compilers or external dependencies are required.
 
-**For External / Open-Source Users (using Bazel):**
-```bash
-bazel build --features=fully_static_link //:kernel_metrics_agent
-```
-
-### 2. Deploying to a VM
-Transfer the compiled binary and the systemd service file to your target VM
-using `gcloud compute scp`. Ensure you replace `<INSTANCE_NAME>`, `<PROJECT_ID>`,
-and `<ZONE>` with your specific VM details.
+Run the following commands directly on your Linux VM to install the agent:
 
 ```bash
-gcloud compute scp bazel-bin/kernel_metrics_agent <INSTANCE_NAME>:~/ --project=<PROJECT_ID> --zone=<ZONE>
-gcloud compute scp guest-memory-metrics-agent.service <INSTANCE_NAME>:~/ --project=<PROJECT_ID> --zone=<ZONE>
-```
+# 1. Detect architecture (x86_64 -> amd64, aarch64 -> arm64)
+ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+case "${ARCH}" in
+  amd64|arm64) ;;
+  *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+esac
+VERSION="latest" # Set to "latest" or a specific release tag, e.g. "v1.0.0"
 
-### 3. Installation
-SSH into your VM and move the deployed files to their standard system locations.
+# 2. Construct download URL based on version
+if [ "${VERSION}" = "latest" ]; then
+  DOWNLOAD_URL="https://github.com/GoogleCloudPlatform/guest-memory-metrics-agent/releases/latest/download"
+else
+  DOWNLOAD_URL="https://github.com/GoogleCloudPlatform/guest-memory-metrics-agent/releases/download/${VERSION}"
+fi
 
-```bash
-# SSH into the VM
-gcloud compute ssh <INSTANCE_NAME> --project=<PROJECT_ID> --zone=<ZONE>
-
-# 1. Install the binary
-sudo mv ~/kernel_metrics_agent /usr/local/bin/
+# 3. Download pre-compiled static binary
+sudo curl -fsSL \
+  "${DOWNLOAD_URL}/kernel_metrics_agent-linux-${ARCH}" \
+  -o /usr/local/bin/kernel_metrics_agent
 sudo chmod +x /usr/local/bin/kernel_metrics_agent
 
-# 2. Install the systemd service file
-sudo mv ~/guest-memory-metrics-agent.service /etc/systemd/system/
+# 4. Download systemd service file
+sudo curl -fsSL \
+  "${DOWNLOAD_URL}/guest-memory-metrics-agent.service" \
+  -o /etc/systemd/system/guest-memory-metrics-agent.service
 
-# 3. Reload systemd so it recognizes the new service
+# 5. Reload systemd daemon
 sudo systemctl daemon-reload
 ```
 
-### 4. Automated Startup and Background Execution (Recommended)
+### 2. Building from Source (Optional)
+If you prefer to compile from source using Bazel, build statically using `--features=fully_static_link`:
+
+```bash
+# 1. Clone repository
+git clone https://github.com/GoogleCloudPlatform/guest-memory-metrics-agent.git
+cd guest-memory-metrics-agent
+
+# 2. Build static binary
+bazel build -c opt --features=fully_static_link //:kernel_metrics_agent
+
+# 3. Install binary and service
+sudo cp bazel-bin/kernel_metrics_agent /usr/local/bin/
+sudo chmod +x /usr/local/bin/kernel_metrics_agent
+sudo cp guest-memory-metrics-agent.service /etc/systemd/system/
+sudo systemctl daemon-reload
+```
+
+### 3. Automated Startup and Background Execution (Recommended)
 For continuous, secure monitoring with least-privilege (granting
 `CAP_DAC_READ_SEARCH` without running as full root), use the provided `systemd`
 service. This ensures the agent runs autonomously and restarts on boot.
@@ -207,7 +224,7 @@ sudo systemctl stop guest-memory-metrics-agent.service
 sudo journalctl -u guest-memory-metrics-agent.service -f
 ```
 
-### 5. Generating Reports from the Daemon
+### 4. Generating Reports from the Daemon
 The background service automatically logs metrics to
 `/var/log/guest-memory-metrics-agent/metrics.log`. To generate a comparative
 analysis report from these logs:
@@ -223,7 +240,7 @@ analysis report from these logs:
    sudo kernel_metrics_agent report --input=/var/log/guest-memory-metrics-agent/metrics.log --start=<START_TIMESTAMP> --end=<STOP_TIMESTAMP>
    ```
 
-### 6. Running Manually in the Foreground
+### 5. Running Manually in the Foreground
 If you prefer not to use the background daemon, you can run the agent
 interactively to collect a quick sample and immediately generate a report:
 
@@ -235,7 +252,7 @@ sudo kernel_metrics_agent record --output=/tmp/metrics.log --memory_duration=60s
 sudo kernel_metrics_agent report --input=/tmp/metrics.log --start=0 --end=3000000000000
 ```
 
-### 7. Explain Mode
+### 6. Explain Mode
 If you encounter a metric in your report that you do not understand, query the
 agent's built-in help database for an immediate explanation of what the metric
 means and how it impacts system memory:
@@ -244,7 +261,7 @@ means and how it impacts system memory:
 kernel_metrics_agent explain pgmajfault
 ```
 
-### 8. Erase Mode
+### 7. Erase Mode
 If you need to free up disk space and want to safely truncate/clear an existing metrics
 log file, you can use the erase mode.
 
@@ -269,7 +286,7 @@ sudo kernel_metrics_agent erase --output=/var/log/guest-memory-metrics-agent/met
 *(You can then run `sudo systemctl start guest-memory-metrics-agent.service`
 whenever you are ready to begin recording metrics again.)*
 
-### 9. Uninstallation
+### 8. Uninstallation
 
 Because the agent is a single, statically-linked binary with zero external dependencies, uninstallation is incredibly fast and leaves no trace on the VM.
 
@@ -299,7 +316,7 @@ sudo /tmp/kernel_metrics_agent erase --output=/tmp/metrics.log
 rm -f /tmp/kernel_metrics_agent /tmp/metrics.log
 ```
 
-### 10. Log Rotation Configuration
+### 9. Log Rotation Configuration
 If you run the background daemon continuously, the log file at `/var/log/guest-memory-metrics-agent/metrics.log` will grow over time. The agent does not deploy its own log rotation rules by default.
 
 If you choose to manage this file using the standard Linux `logrotate` utility, you **must include the `copytruncate` directive** in your configuration. Because the agent keeps the log file's descriptor open while it is running, standard rotation (which renames the file) will cause the agent to continue writing to the rotated, old file instead of the new one. The `copytruncate` directive safely truncates the original file in place, seamlessly working with the running agent. Because the agent uses systemd `DynamicUser`, `copytruncate` is also strictly required to prevent logrotate from creating new files with incorrect `root` permissions, which will break the agent.
@@ -316,7 +333,7 @@ Here is an example configuration you can place in `/etc/logrotate.d/guest-memory
     copytruncate
 }
 ```
-### 11. Troubleshooting & Support
+### 10. Troubleshooting & Support
 
 If you encounter an issue where the `guest-memory-metrics-agent.service` fails to start, crashes unexpectedly, or exhibits other unusual behavior, you can extract the daemon's internal error logs to share with Google Cloud Support.
 
