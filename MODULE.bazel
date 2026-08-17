@@ -17,6 +17,6 @@ module(
     version = "1.0",
 )
 
-bazel_dep(name = "rules_cc", version = "0.0.9")
-bazel_dep(name = "abseil-cpp", version = "20240116.2", repo_name = "com_google_absl")
-bazel_dep(name = "googletest", version = "1.14.0", repo_name = "com_google_googletest")
+bazel_dep(name = "rules_cc", version = "0.2.17")
+bazel_dep(name = "abseil-cpp", version = "20250814.1", repo_name = "com_google_absl")
+bazel_dep(name = "googletest", version = "1.17.0", repo_name = "com_google_googletest")
