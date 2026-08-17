@@ -141,20 +141,8 @@ void ReportEngine::GenerateReport(const std::string& input_path,
 
   size_t max_metric_len = 6;  // Length of "Metric"
   for (const auto& metric : all_metrics) {
-    uint64_t start_val = 0;
-    uint64_t end_val = 0;
-    if (best_start->metrics.count(metric)) {
-      start_val = best_start->metrics.at(metric);
-    }
-    if (best_end->metrics.count(metric)) {
-      end_val = best_end->metrics.at(metric);
-    }
-    int64_t delta =
-        static_cast<int64_t>(end_val) - static_cast<int64_t>(start_val);
-    if (delta != 0) {
-      if (metric.length() > max_metric_len) {
-        max_metric_len = metric.length();
-      }
+    if (metric.length() > max_metric_len) {
+      max_metric_len = metric.length();
     }
   }
 
@@ -182,19 +170,17 @@ void ReportEngine::GenerateReport(const std::string& input_path,
     int64_t delta =
         static_cast<int64_t>(end_val) - static_cast<int64_t>(start_val);
 
-    if (delta != 0) {
-      std::cout << std::left << std::setw(metric_col_width) << metric
-                << std::right << std::setw(15) << start_val << std::setw(15)
-                << end_val << std::setw(15) << delta;
+    std::cout << std::left << std::setw(metric_col_width) << metric
+              << std::right << std::setw(15) << start_val << std::setw(15)
+              << end_val << std::setw(15) << delta;
 
-      if (start_val > 0) {
-        double pct_change = (static_cast<double>(delta) / start_val) * 100.0;
-        std::cout << std::setw(14) << std::fixed << std::setprecision(2) << pct_change << "%";
-      } else {
-        std::cout << std::setw(15) << "N/A";
-      }
-      std::cout << "\n";
+    if (start_val > 0) {
+      double pct_change = (static_cast<double>(delta) / start_val) * 100.0;
+      std::cout << std::setw(14) << std::fixed << std::setprecision(2) << pct_change << "%";
+    } else {
+      std::cout << std::setw(15) << "N/A";
     }
+    std::cout << "\n";
   }
 }
 

@@ -299,6 +299,37 @@ sudo /tmp/kernel_metrics_agent erase --output=/tmp/metrics.log
 rm -f /tmp/kernel_metrics_agent /tmp/metrics.log
 ```
 
+### 10. Log Rotation Configuration
+If you run the background daemon continuously, the log file at `/var/log/guest-memory-metrics-agent/metrics.log` will grow over time. The agent does not deploy its own log rotation rules by default.
+
+If you choose to manage this file using the standard Linux `logrotate` utility, you **must include the `copytruncate` directive** in your configuration. Because the agent keeps the log file's descriptor open while it is running, standard rotation (which renames the file) will cause the agent to continue writing to the rotated, old file instead of the new one. The `copytruncate` directive safely truncates the original file in place, seamlessly working with the running agent. Because the agent uses systemd `DynamicUser`, `copytruncate` is also strictly required to prevent logrotate from creating new files with incorrect `root` permissions, which will break the agent.
+
+Here is an example configuration you can place in `/etc/logrotate.d/guest-memory-metrics-agent`:
+
+```text
+/var/log/guest-memory-metrics-agent/metrics.log {
+    daily
+    size 100M
+    rotate 7
+    missingok
+    notifempty
+    copytruncate
+}
+```
+### 11. Troubleshooting & Support
+
+If you encounter an issue where the `guest-memory-metrics-agent.service` fails to start, crashes unexpectedly, or exhibits other unusual behavior, you can extract the daemon's internal error logs to share with Google Cloud Support.
+
+Because the daemon strictly separates operational health information (which is routed to `stderr`) from actual memory snapshots, your internal error logs are safely isolated in the system journal.
+
+To export the last 3 days of operational logs to a single text file that you can attach to your Support ticket, run:
+
+```bash
+sudo journalctl -u guest-memory-metrics-agent.service --since "3 days ago" --no-pager > guest_metrics_agent_debug.log
+```
+
+*Note: This log file exclusively tracks the health, configuration, and initialization steps of the agent. It does not contain the historical memory metric snapshots from your virtual machine.*
+
 ## Deployment and Terms
 
 This tool is designed to be executed within [Google Compute Engine (GCE)
