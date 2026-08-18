@@ -25,6 +25,7 @@ exports_files(["LICENSE"])
 cc_binary(
     name = "kernel_metrics_agent",
     srcs = ["main.cc"],
+    features = ["fully_static_link"],
     linkstatic = True,
     deps = [
         "@com_google_absl//absl/flags:flag",
