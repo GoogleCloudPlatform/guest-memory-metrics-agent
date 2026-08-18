@@ -75,6 +75,7 @@ cc_library(
     hdrs = ["report_engine.h"],
     deps = [
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
     ],
 )
 

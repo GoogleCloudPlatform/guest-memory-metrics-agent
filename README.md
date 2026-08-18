@@ -139,7 +139,9 @@ This tool is expressly built for:
 ## Installation and Usage Instructions
 
 ### 1. Fast Binary Installation (Recommended)
-Pre-compiled, fully statically linked standalone binaries are available for each release across both `x86_64` (AMD64) and `aarch64` (ARM64) architectures. No compilers or external dependencies are required.
+Pre-compiled, fully statically linked standalone binaries are available for each
+release across both `x86_64` (AMD64) and `aarch64` (ARM64) architectures. No
+compilers or external dependencies are required.
 
 Run the following commands directly on your Linux VM to install the agent:
 
@@ -175,7 +177,8 @@ sudo systemctl daemon-reload
 ```
 
 ### 2. Building from Source (Optional)
-If you prefer to compile from source using Bazel, build statically using `--features=fully_static_link`:
+If you prefer to compile from source using Bazel, build statically using
+`--features=fully_static_link`:
 
 ```bash
 # 1. Clone repository
@@ -226,19 +229,47 @@ sudo journalctl -u guest-memory-metrics-agent.service -f
 
 ### 4. Generating Reports from the Daemon
 The background service automatically logs metrics to
-`/var/log/guest-memory-metrics-agent/metrics.log`. To generate a comparative
-analysis report from these logs:
+`/var/log/guest-memory-metrics-agent/metrics.log`. The agent supports both
+**2-point Delta Comparative Reports** (`--delta`) and **Comprehensive
+Time-Series CSV Reports** (`--comprehensive`):
 
-1. Identify the specific time window you want to analyze. Find the exact start
-   and stop timestamps recorded by the daemon:
-   ```bash
-   sudo journalctl -u guest-memory-metrics-agent.service | grep "AGENT_"
-   ```
-2. Run the report command using the daemon's log file and your chosen
-   timestamps:
-   ```bash
-   sudo kernel_metrics_agent report --input=/var/log/guest-memory-metrics-agent/metrics.log --start=<START_TIMESTAMP> --end=<STOP_TIMESTAMP>
-   ```
+#### A. Comprehensive Time-Series Report (`--comprehensive`)
+Exports all collected metric snapshots across the specified timeframe into a
+clean CSV format suitable for analytics pipelines (such as the Guest-Host
+Analytics Engine):
+```bash
+# Output comprehensive CSV to a file:
+sudo kernel_metrics_agent report --comprehensive \
+  --input=/var/log/guest-memory-metrics-agent/metrics.log \
+  --start=<START_TIMESTAMP> --end=<STOP_TIMESTAMP> \
+  --output=/tmp/comprehensive_metrics.csv
+
+# Or stream comprehensive CSV to STDOUT:
+sudo kernel_metrics_agent report --comprehensive \
+  --input=/var/log/guest-memory-metrics-agent/metrics.log \
+  --start=<START_TIMESTAMP> --end=<STOP_TIMESTAMP>
+```
+
+#### B. Delta Comparative Report (`--delta` or default)
+Computes comparative deltas and percentage changes between the closest start
+and end snapshots:
+```bash
+# Display delta summary table in STDOUT (default):
+sudo kernel_metrics_agent report --delta \
+  --input=/var/log/guest-memory-metrics-agent/metrics.log \
+  --start=<START_TIMESTAMP> --end=<STOP_TIMESTAMP>
+
+# Export delta summary to CSV file:
+sudo kernel_metrics_agent report --delta --csv \
+  --input=/var/log/guest-memory-metrics-agent/metrics.log \
+  --start=<START_TIMESTAMP> --end=<STOP_TIMESTAMP> \
+  --output=/tmp/delta_report.csv
+
+# Stream delta summary as CSV to STDOUT:
+sudo kernel_metrics_agent report --delta --csv \
+  --input=/var/log/guest-memory-metrics-agent/metrics.log \
+  --start=<START_TIMESTAMP> --end=<STOP_TIMESTAMP>
+```
 
 ### 5. Running Manually in the Foreground
 If you prefer not to use the background daemon, you can run the agent
@@ -248,8 +279,8 @@ interactively to collect a quick sample and immediately generate a report:
 # Record for 60 seconds, sampling every 2 seconds
 sudo kernel_metrics_agent record --output=/tmp/metrics.log --memory_duration=60s --sample=2s
 
-# Generate a comparative report from the recorded data
-sudo kernel_metrics_agent report --input=/tmp/metrics.log --start=0 --end=3000000000000
+# Generate a comprehensive time-series CSV report from the recorded data
+sudo kernel_metrics_agent report --comprehensive --input=/tmp/metrics.log --start=0 --end=3000000000000 --output=/tmp/guest_metrics.csv
 ```
 
 ### 6. Explain Mode

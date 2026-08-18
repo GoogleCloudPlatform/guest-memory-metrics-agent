@@ -39,10 +39,18 @@
 ABSL_FLAG(absl::Duration, memory_duration, absl::Minutes(5),
           "Duration to record memory metrics");
 ABSL_FLAG(absl::Duration, sample, absl::Seconds(5), "Sampling interval");
-ABSL_FLAG(std::string, output, "", "Destination path for the output log file");
+ABSL_FLAG(std::string, output, "",
+          "Destination path for the output log or report file");
 ABSL_FLAG(std::string, start, "", "Start timestamp for report");
 ABSL_FLAG(std::string, end, "", "End timestamp for report");
 ABSL_FLAG(std::string, input, "", "Input log file for report");
+ABSL_FLAG(bool, delta, false,
+          "Generate delta report mode (2-point comparison)");
+ABSL_FLAG(bool, comprehensive, false,
+          "Generate comprehensive report mode (all metrics across timestamps)");
+ABSL_FLAG(bool, csv, false, "Generate report in CSV format");
+ABSL_FLAG(std::string, format, "",
+          "Output format for report: 'table' or 'csv'");
 
 int main(int argc, char* argv[]) {
   // Parse command line flags
@@ -154,14 +162,50 @@ int main(int argc, char* argv[]) {
     std::string input_path = absl::GetFlag(FLAGS_input);
     std::string start_str = absl::GetFlag(FLAGS_start);
     std::string end_str = absl::GetFlag(FLAGS_end);
+    std::string output_path = absl::GetFlag(FLAGS_output);
+    std::string format_str = absl::GetFlag(FLAGS_format);
+    bool is_delta = absl::GetFlag(FLAGS_delta);
+    bool is_comprehensive = absl::GetFlag(FLAGS_comprehensive);
+    bool is_csv = absl::GetFlag(FLAGS_csv);
+
+    if (is_delta && is_comprehensive) {
+      std::cerr << "Cannot specify both --delta and --comprehensive modes.\n";
+      return 3;
+    }
+
+    if (!format_str.empty() && format_str != "table" && format_str != "csv") {
+      std::cerr << "Invalid --format value: '" << format_str
+                << "'. Must be 'table' or 'csv'.\n";
+      return 3;
+    }
 
     if (input_path.empty() || start_str.empty() || end_str.empty()) {
       std::cerr << "Report mode requires --input, --start, and --end flags.\n";
       return 3;
     }
 
+    guest_memory_metrics::ReportOptions options;
+    options.input_path = input_path;
+    options.start_str = start_str;
+    options.end_str = end_str;
+    options.output_path = output_path;
+
+    if (is_comprehensive) {
+      options.type = guest_memory_metrics::ReportType::kComprehensive;
+      options.format = guest_memory_metrics::ReportFormat::kCsv;
+    } else {
+      options.type = guest_memory_metrics::ReportType::kDelta;
+      if (is_csv || format_str == "csv") {
+        options.format = guest_memory_metrics::ReportFormat::kCsv;
+      } else {
+        options.format = guest_memory_metrics::ReportFormat::kTable;
+      }
+    }
+
     guest_memory_metrics::ReportEngine engine;
-    engine.GenerateReport(input_path, start_str, end_str);
+    if (!engine.GenerateReport(options)) {
+      return 3;
+    }
 
   } else if (mode == "explain") {
     if (positional.size() < 3) {

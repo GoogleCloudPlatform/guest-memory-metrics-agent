@@ -1,1 +1,0 @@
-common --incompatible_autoload_externally=cc_library,cc_binary,cc_test
